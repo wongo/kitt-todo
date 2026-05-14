@@ -56,11 +56,15 @@ async def debug_schema() -> dict:
     p = await get_pool()
     async with p.acquire() as conn:
         search_path = await conn.fetchval("SHOW search_path")
-        tables = await conn.fetch("""
-            SELECT table_name FROM information_schema.tables
-            WHERE table_schema = 'kitt_todo'
-        """)
+        # Check both schemas
+        kitt_reminders = await conn.fetchval(
+            "SELECT count(*) FROM \"kitt_todo\".reminders"
+        )
+        public_reminders = await conn.fetchval(
+            "SELECT count(*) FROM public.reminders"
+        )
     return {
         "search_path": search_path,
-        "tables": [t["table_name"] for t in tables]
+        "kitt_reminders_count": kitt_reminders,
+        "public_reminders_count": public_reminders,
     }
