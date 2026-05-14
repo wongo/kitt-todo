@@ -44,12 +44,6 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/debug/pool")
 async def debug_pool() -> dict[str, str]:
-    """Test the database pool - this uses the same pool as reminders router"""
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT 1 as test, now() as ts")
-            return {"pool": "ok", "test": dict(row)}
-    except Exception as exc:
-        import traceback
-        return {"pool": "error", "detail": str(exc), "trace": traceback.format_exc()}
+    """Minimal pool test"""
+    p = await get_pool()
+    return {"status": "pool_created", "pool_size": p.get_size()}
