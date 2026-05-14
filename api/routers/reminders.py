@@ -7,9 +7,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 try:
-    from ..db import get_pool
-except ImportError:
-    from db import get_pool
+    from ..db import NEON_SCHEMA, get_pool
+except ImportError:  # pragma: no cover
+    from db import NEON_SCHEMA, get_pool
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
@@ -24,24 +24,15 @@ class ReminderSent(BaseModel):
     sent: bool = True
 
 
-async def _get_pool():
-    from db import get_pool
-    return await get_pool()
-
-
 @router.post("")
 async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
     """POST /api/reminders - create a reminder"""
-    pool = await _get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
-        # Check task exists
         task_row = await conn.fetchrow(
-            f'SELECT id FROM "{conn.execute_kwargs.get("schema", "kitt_todo")}".tasks WHERE id = $1',
+            f'SELECT id FROM "{NEON_SCHEMA}".tasks WHERE id = $1',
             payload.task_id,
         )
-        if not task_row:
-            # Try without schema prefix since search_path is set
-            task_row = await conn.fetchrow("SELECT id FROM tasks WHERE id = $1", payload.task_id)
         if not task_row:
             raise HTTPException(status_code=404, detail="Task not found")
 
@@ -61,7 +52,7 @@ async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
 @router.get("/due")
 async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[str, Any]]:
     """GET /api/reminders/due?now=... - get reminders due before now"""
-    pool = await _get_pool()
+    pool = await get_pool()
     if now is None:
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     async with pool.acquire() as conn:
@@ -81,7 +72,7 @@ async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[
 @router.post("/{reminder_id}/sent")
 async def mark_reminder_sent(reminder_id: str) -> dict[str, Any]:
     """POST /api/reminders/{id}/sent - mark a reminder as sent"""
-    pool = await _get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
