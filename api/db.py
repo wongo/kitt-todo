@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Final
 
 import asyncpg
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
@@ -13,6 +13,7 @@ DATABASE_URL: Final[str | None] = os.getenv("DATABASE_URL")
 NEON_SCHEMA: Final[str] = os.getenv("NEON_SCHEMA", "kitt_todo")
 
 pool: asyncpg.Pool | None = None
+_log = logging.getLogger("kitt-todo")
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -25,6 +26,7 @@ async def create_pool() -> asyncpg.Pool:
         return pool
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is required")
+    _log.warning("create_pool: connecting to Neon...")
     pool = await asyncpg.create_pool(
         dsn=DATABASE_URL,
         min_size=1,
@@ -32,12 +34,14 @@ async def create_pool() -> asyncpg.Pool:
         command_timeout=60,
         init=_init_connection,
     )
+    _log.warning("create_pool: pool created")
     return pool
 
 
 async def get_pool() -> asyncpg.Pool:
+    global pool
     if pool is None:
-        return await create_pool()
+        await create_pool()
     return pool
 
 
@@ -49,9 +53,12 @@ async def close_pool() -> None:
 
 
 async def init_schema() -> None:
+    _log.warning("INIT_SCHEMA starting...")
     db_pool = await get_pool()
     async with db_pool.acquire() as conn:
+        _log.warning("init_schema: acquired connection")
         await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{NEON_SCHEMA}"')
+        _log.warning("init_schema: schema created")
         await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
         await conn.execute(
             f"""
@@ -71,7 +78,6 @@ async def init_schema() -> None:
             )
             """
         )
-        # Migration: add notes column if it doesn't exist (idempotent)
         await conn.execute(f'ALTER TABLE "{NEON_SCHEMA}".tasks ADD COLUMN IF NOT EXISTS notes TEXT')
         await conn.execute(
             f"""
@@ -93,22 +99,12 @@ async def init_schema() -> None:
             )
             """
         )
-        # Ensure FK constraint exists (idempotent, handles case where table was created without it)
-        await conn.execute(f"""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'reminders_task_fk'
-                ) THEN
-                    ALTER TABLE "{NEON_SCHEMA}".reminders
-                    ADD CONSTRAINT reminders_task_fk
-                    FOREIGN KEY (task_id) REFERENCES "{NEON_SCHEMA}".tasks(id) ON DELETE CASCADE;
-                END IF;
-            END $$;
-        """)
         await conn.execute(
             f"""
             CREATE INDEX IF NOT EXISTS idx_reminders_due
             ON "{NEON_SCHEMA}".reminders (remind_at)
             """
         )
+        _log.warning("init_schema: all tables verified")
+        sp = await conn.fetchval("SHOW search_path")
+        _log.warning("init_schema: search_path = %s", sp)
