@@ -36,6 +36,8 @@ async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
         if not task_row:
             raise HTTPException(status_code=404, detail="Task not found")
 
+        # Parse ISO string to datetime for asyncpg
+        remind_dt = datetime.fromisoformat(payload.remind_at.replace("Z", "+00:00"))
         row = await conn.fetchrow(
             """
             INSERT INTO reminders (task_id, remind_at, chat_id)
@@ -43,7 +45,7 @@ async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
             RETURNING id, task_id, remind_at::text, chat_id, sent
             """,
             payload.task_id,
-            payload.remind_at,
+            remind_dt,
             payload.chat_id,
         )
         return dict(row)
@@ -54,7 +56,9 @@ async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[
     """GET /api/reminders/due?now=... - get reminders due before now"""
     pool = await get_pool()
     if now is None:
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        now_val = datetime.now(timezone.utc).replace(microsecond=0)
+    else:
+        now_val = datetime.fromisoformat(now.replace("Z", "+00:00"))
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -64,7 +68,7 @@ async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[
             WHERE r.sent = FALSE AND r.remind_at <= $1 AND t.is_done = FALSE
             ORDER BY r.remind_at
             """,
-            now,
+            now_val,
         )
         return [dict(row) for row in rows]
 
