@@ -82,3 +82,21 @@ async def init_schema() -> None:
             )
             """
         )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS "{NEON_SCHEMA}".reminders (
+                id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                task_id TEXT NOT NULL,
+                remind_at TIMESTAMPTZ NOT NULL,
+                chat_id TEXT,
+                sent BOOLEAN DEFAULT FALSE
+            )
+            """
+        )
+        # Index for faster due-reminder queries (partial index on unsent reminders)
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_reminders_due
+            ON "{NEON_SCHEMA}".reminders (remind_at) WHERE sent = FALSE
+            """
+        )

@@ -206,3 +206,52 @@ def list_categories() -> list[dict[str, Any]] | None:
 def set_task_category(task_id: str, category: str | None) -> dict[str, Any] | None:
     """PUT /api/tasks/{task_id} with category field"""
     return update_task(task_id, category=category)
+
+
+# Reminders
+
+def create_reminder(task_id: str, remind_at: str, chat_id: str | None = None) -> dict[str, Any] | None:
+    """POST /api/reminders"""
+    payload = {"task_id": task_id, "remind_at": remind_at}
+    if chat_id is not None:
+        payload["chat_id"] = chat_id
+    try:
+        resp = _get_client().post("/api/reminders", json=payload)
+        if resp.status_code in (200, 201):
+            return resp.json()
+        if resp.status_code == 404:
+            logger.warning("Task %s not found when creating reminder", task_id)
+            return None
+        return _handle_error(resp, "create_reminder")
+    except httpx.RequestError as exc:
+        logger.error("Network error creating reminder: %s", exc)
+        return None
+
+
+def get_due_reminders(now: str | None = None) -> list[dict[str, Any]] | None:
+    """GET /api/reminders/due?now=..."""
+    params = {}
+    if now is not None:
+        params["now"] = now
+    try:
+        resp = _get_client().get("/api/reminders/due", params=params)
+        if resp.status_code == 200:
+            return resp.json()
+        return _handle_error(resp, "get_due_reminders")
+    except httpx.RequestError as exc:
+        logger.error("Network error getting due reminders: %s", exc)
+        return None
+
+
+def mark_reminder_sent(reminder_id: str) -> dict[str, Any] | None:
+    """POST /api/reminders/{id}/sent"""
+    try:
+        resp = _get_client().post(f"/api/reminders/{reminder_id}/sent")
+        if resp.status_code == 200:
+            return resp.json()
+        if resp.status_code == 404:
+            return None
+        return _handle_error(resp, f"mark_reminder_sent({reminder_id})")
+    except httpx.RequestError as exc:
+        logger.error("Network error marking reminder sent %s: %s", reminder_id, exc)
+        return None

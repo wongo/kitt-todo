@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+
+try:
+    from ..db import get_pool
+except ImportError:
+    from db import get_pool
+
+router = APIRouter(prefix="/reminders", tags=["reminders"])
+
+
+class ReminderCreate(BaseModel):
+    task_id: str
+    remind_at: str  # ISO8601 timestamp
+    chat_id: str | None = None
+
+
+class ReminderSent(BaseModel):
+    sent: bool = True
+
+
+async def _get_pool():
+    from db import get_pool
+    return await get_pool()
+
+
+@router.post("")
+async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
+    """POST /api/reminders - create a reminder"""
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        # Check task exists
+        task_row = await conn.fetchrow(
+            f'SELECT id FROM "{conn.execute_kwargs.get("schema", "kitt_todo")}".tasks WHERE id = $1',
+            payload.task_id,
+        )
+        if not task_row:
+            # Try without schema prefix since search_path is set
+            task_row = await conn.fetchrow("SELECT id FROM tasks WHERE id = $1", payload.task_id)
+        if not task_row:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        row = await conn.fetchrow(
+            """
+            INSERT INTO reminders (task_id, remind_at, chat_id)
+            VALUES ($1, $2, $3)
+            RETURNING id, task_id, remind_at::text, chat_id, sent
+            """,
+            payload.task_id,
+            payload.remind_at,
+            payload.chat_id,
+        )
+        return dict(row)
+
+
+@router.get("/due")
+async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[str, Any]]:
+    """GET /api/reminders/due?now=... - get reminders due before now"""
+    pool = await _get_pool()
+    if now is None:
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT r.id, r.task_id, r.remind_at::text, r.chat_id, r.sent, t.title
+            FROM reminders r
+            JOIN tasks t ON t.id = r.task_id
+            WHERE r.sent = FALSE AND r.remind_at <= $1 AND t.is_done = FALSE
+            ORDER BY r.remind_at
+            """,
+            now,
+        )
+        return [dict(row) for row in rows]
+
+
+@router.post("/{reminder_id}/sent")
+async def mark_reminder_sent(reminder_id: str) -> dict[str, Any]:
+    """POST /api/reminders/{id}/sent - mark a reminder as sent"""
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE reminders SET sent = TRUE WHERE id = $1
+            RETURNING id, task_id, remind_at::text, chat_id, sent
+            """,
+            reminder_id,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        return dict(row)

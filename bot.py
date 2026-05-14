@@ -48,25 +48,28 @@ def reminder_worker(application) -> None:
     stop_event: threading.Event = application.bot_data["reminder_stop_event"]
     loop = application.bot_data["event_loop"]
     while not stop_event.is_set():
-        # Reminders still use local db (local-only feature)
-        from db import due_reminders, mark_reminder_sent as _mark_sent
         now = datetime.now().replace(microsecond=0).isoformat()
-        for reminder in due_reminders(now):
+        reminders = api_client.get_due_reminders(now)
+        if reminders is None:
+            LOGGER.warning("Failed to fetch due reminders, will retry in 30s")
+            stop_event.wait(30)
+            continue
+        for reminder in reminders:
             chat_id = reminder.get("chat_id")
             if not chat_id:
-                _mark_sent(reminder["id"])
+                api_client.mark_reminder_sent(reminder["id"])
                 continue
-            message = f"Reminder: {reminder['title']} (`{reminder['task_id']}`)"
+            message = f"🔔 提醒：{reminder.get('title', '任務')}"
             future = asyncio.run_coroutine_threadsafe(
                 application.bot.send_message(chat_id=chat_id, text=message),
                 loop,
             )
             try:
                 future.result(timeout=20)
-                _mark_sent(reminder["id"])
+                api_client.mark_reminder_sent(reminder["id"])
             except Exception:
                 LOGGER.exception("Failed to send reminder %s", reminder["id"])
-        stop_event.wait(60)
+        stop_event.wait(30)
 
 
 async def post_init(application) -> None:

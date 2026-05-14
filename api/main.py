@@ -5,10 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 try:  # Supports both `uvicorn api.main:app` and `cd api && uvicorn main:app`.
     from .db import close_pool, create_pool, init_schema
-    from .routers import categories, tasks
+    from .routers import categories, tasks, reminders
 except ImportError:  # pragma: no cover
     from db import close_pool, create_pool, init_schema
-    from routers import categories, tasks
+    from routers import categories, tasks, reminders
 
 
 app = FastAPI(title="KITT-TODO API", version="2.0.0")
@@ -23,6 +23,7 @@ app.add_middleware(
 
 app.include_router(tasks.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
+app.include_router(reminders.router, prefix="/api")
 
 
 @app.on_event("startup")
