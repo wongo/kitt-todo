@@ -45,4 +45,6 @@ async def health() -> dict[str, str]:
 @app.get("/api/debug/pool")
 async def debug_pool() -> dict:
     p = await get_pool()
-    return {"pool_size": p.get_size(), "min_size": p.get_min_size()}
+    async with p.acquire() as conn:
+        row = await conn.fetchrow("SELECT now() as ts")
+    return {"pool_size": p.get_size(), "time": str(row["ts"])}
