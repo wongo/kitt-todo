@@ -6,7 +6,7 @@ import os
 import threading
 from datetime import datetime
 
-import db
+import api_client
 from parser import parse_quick_add
 
 try:
@@ -37,7 +37,10 @@ async def quick_add(update, context) -> None:
     parsed = parse_quick_add(update.message.text or "")
     if parsed is None:
         return
-    task = db.create_task(**parsed)
+    task = api_client.create_task(**parsed)
+    if task is None:
+        await update.message.reply_text("Service temporarily unavailable. Please try again later.")
+        return
     await update.message.reply_text(f"Added {task['id']}: {task['title']}")
 
 
@@ -45,11 +48,13 @@ def reminder_worker(application) -> None:
     stop_event: threading.Event = application.bot_data["reminder_stop_event"]
     loop = application.bot_data["event_loop"]
     while not stop_event.is_set():
+        # Reminders still use local db (local-only feature)
+        from db import due_reminders, mark_reminder_sent as _mark_sent
         now = datetime.now().replace(microsecond=0).isoformat()
-        for reminder in db.due_reminders(now):
+        for reminder in due_reminders(now):
             chat_id = reminder.get("chat_id")
             if not chat_id:
-                db.mark_reminder_sent(reminder["id"])
+                _mark_sent(reminder["id"])
                 continue
             message = f"Reminder: {reminder['title']} (`{reminder['task_id']}`)"
             future = asyncio.run_coroutine_threadsafe(
@@ -58,14 +63,13 @@ def reminder_worker(application) -> None:
             )
             try:
                 future.result(timeout=20)
-                db.mark_reminder_sent(reminder["id"])
+                _mark_sent(reminder["id"])
             except Exception:
                 LOGGER.exception("Failed to send reminder %s", reminder["id"])
         stop_event.wait(60)
 
 
 async def post_init(application) -> None:
-    db.init_db()
     application.bot_data["event_loop"] = asyncio.get_running_loop()
     application.bot_data["reminder_stop_event"] = threading.Event()
     thread = threading.Thread(target=reminder_worker, args=(application,), daemon=True)

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import db
+from db import create_reminder as _create_reminder
+import api_client
 
 try:
     from telegram.ext import CommandHandler, ConversationHandler, MessageHandler, filters
@@ -20,8 +21,13 @@ def reminder_iso_for_today(hhmm: str) -> str:
 
 
 async def _save_reminder(update, task_id: str, hhmm: str) -> None:
+    # Check task exists via API
+    task = api_client.get_task(task_id)
+    if task is None:
+        await update.message.reply_text("Task not found.")
+        return
     try:
-        reminder = db.create_reminder(task_id, reminder_iso_for_today(hhmm), chat_id=update.effective_chat.id)
+        reminder = _create_reminder(task_id, reminder_iso_for_today(hhmm), chat_id=update.effective_chat.id)
     except ValueError as exc:
         await update.message.reply_text(f"Could not set reminder: {exc}")
         return

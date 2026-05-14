@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import shlex
 import re
+import shlex
 from datetime import datetime
 
-import db
+import api_client
 
 try:
     from telegram.ext import CommandHandler, ConversationHandler, MessageHandler, filters
@@ -86,17 +86,16 @@ async def add_task(update, context) -> None:
     tokens = _split_command_text(update.message.text)[1:]
     words, flags = _parse_flags(tokens)
     due_date, due_time = _parse_due(flags.get("due"))
-    try:
-        task = db.create_task(
-            title=" ".join(words),
-            priority=flags.get("priority", "medium"),
-            category=flags.get("category"),
-            due_date=due_date,
-            due_time=due_time,
-            repeat_type=flags.get("repeat"),
-        )
-    except ValueError as exc:
-        await update.message.reply_text(f"Could not add task: {exc}")
+    task = api_client.create_task(
+        title=" ".join(words),
+        priority=flags.get("priority", "medium"),
+        category=flags.get("category"),
+        due_date=due_date,
+        due_time=due_time,
+        repeat_type=flags.get("repeat"),
+    )
+    if task is None:
+        await update.message.reply_text("Service temporarily unavailable.")
         return
     await update.message.reply_text(f"Added {_format_task(task)}", parse_mode="Markdown")
 
@@ -104,22 +103,39 @@ async def add_task(update, context) -> None:
 async def list_task_command(update, context) -> None:
     tokens = _split_command_text(update.message.text)[1:]
     _, flags = _parse_flags(tokens)
-    tasks = db.list_tasks(category=flags.get("category"))
+    tasks = api_client.list_tasks(category=flags.get("category"))
+    if tasks is None:
+        await update.message.reply_text("Service temporarily unavailable.")
+        return
     await update.message.reply_text(format_task_list(tasks), parse_mode="Markdown")
 
 
 async def overdue(update, context) -> None:
-    tasks = db.overdue_tasks()
-    await update.message.reply_text(format_task_list(tasks), parse_mode="Markdown")
+    tasks = api_client.list_tasks(status="pending")
+    if tasks is None:
+        await update.message.reply_text("Service temporarily unavailable.")
+        return
+    now = datetime.now()
+    overdue = []
+    for task in tasks:
+        if not task.get("due_date"):
+            continue
+        try:
+            due_dt = datetime.fromisoformat(f"{task['due_date']} {task.get('due_time', '23:59')}")
+            if due_dt < now:
+                overdue.append(task)
+        except ValueError:
+            pass
+    await update.message.reply_text(format_task_list(overdue), parse_mode="Markdown")
 
 
 async def done(update, context) -> None:
     if not context.args:
         await update.message.reply_text("Usage: /done <task_id>")
         return
-    task = db.mark_task_done(context.args[0])
-    if not task:
-        await update.message.reply_text("Task not found.")
+    task = api_client.mark_task_done(context.args[0])
+    if task is None:
+        await update.message.reply_text("Task not found or service unavailable.")
         return
     await update.message.reply_text(f"Done: {task['title']}")
 
@@ -128,16 +144,17 @@ async def delete(update, context) -> None:
     if not context.args:
         await update.message.reply_text("Usage: /delete <task_id>")
         return
-    if db.delete_task(context.args[0]):
+    if api_client.delete_task(context.args[0]):
         await update.message.reply_text("Deleted.")
     else:
-        await update.message.reply_text("Task not found.")
+        await update.message.reply_text("Task not found or service unavailable.")
 
 
 async def edit_start(update, context):
     args = context.args
     if len(args) >= 2:
-        ok = db.update_task_title(args[0], " ".join(args[1:]))
+        result = api_client.update_task(args[0], title=" ".join(args[1:]))
+        ok = result is not None
         await update.message.reply_text("Updated." if ok else "Task not found.")
         return ConversationHandler.END
     if len(args) == 1:
@@ -156,8 +173,8 @@ async def edit_receive_task_id(update, context):
 
 async def edit_receive_title(update, context):
     task_id = context.user_data.pop("edit_task_id", "")
-    ok = db.update_task_title(task_id, update.message.text.strip())
-    await update.message.reply_text("Updated." if ok else "Task not found.")
+    result = api_client.update_task(task_id, title=update.message.text.strip())
+    await update.message.reply_text("Updated." if result else "Task not found.")
     return ConversationHandler.END
 
 

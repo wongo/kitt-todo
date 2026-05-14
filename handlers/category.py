@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from handlers.task import _parse_flags, _split_command_text
 
-import db
+import api_client
 
 try:
     from telegram.ext import CommandHandler
@@ -16,10 +16,9 @@ async def category(update, context) -> None:
         await update.message.reply_text("Usage: /category add <name> [--icon emoji]")
         return
     words, flags = _parse_flags(tokens[1:])
-    try:
-        item = db.add_category(" ".join(words), icon=flags.get("icon", "📂"))
-    except ValueError as exc:
-        await update.message.reply_text(f"Could not add category: {exc}")
+    item = api_client.add_category(" ".join(words), icon=flags.get("icon", "📂"))
+    if item is None:
+        await update.message.reply_text("Service temporarily unavailable.")
         return
     await update.message.reply_text(f"Category saved: {item['icon']} {item['name']}")
 
@@ -29,16 +28,20 @@ async def tag(update, context) -> None:
         await update.message.reply_text("Usage: /tag <task_id> <category>")
         return
     task_id, category_name = context.args[0], " ".join(context.args[1:])
-    if not db.get_category(category_name):
-        db.add_category(category_name)
-    if db.set_task_category(task_id, category_name):
+    if api_client.get_category(category_name) is None:
+        api_client.add_category(category_name)
+    result = api_client.set_task_category(task_id, category_name)
+    if result is not None:
         await update.message.reply_text("Tagged.")
     else:
-        await update.message.reply_text("Task not found.")
+        await update.message.reply_text("Task not found or service unavailable.")
 
 
 async def categories(update, context) -> None:
-    items = db.list_categories()
+    items = api_client.list_categories()
+    if items is None:
+        await update.message.reply_text("Service temporarily unavailable.")
+        return
     if not items:
         await update.message.reply_text("No categories.")
         return
