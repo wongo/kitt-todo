@@ -66,10 +66,13 @@ async def init_schema() -> None:
                 is_done BOOLEAN DEFAULT FALSE,
                 done_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
-                next_due DATE
+                next_due DATE,
+                notes TEXT
             )
             """
         )
+        # Migration: add notes column if it doesn't exist (idempotent)
+        await conn.execute(f'ALTER TABLE "{NEON_SCHEMA}".tasks ADD COLUMN IF NOT EXISTS notes TEXT')
         await conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS "{NEON_SCHEMA}".categories (

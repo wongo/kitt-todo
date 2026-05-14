@@ -44,6 +44,11 @@ export default function TaskItem({ task, onDone, onEdit, onDelete, completed = f
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-400">
           <span className={overdue ? "text-kitt-red" : ""}>{formatDue(task)}</span>
           {task.category && <span className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-200">#{task.category}</span>}
+          {task.notes && (
+            <span className="rounded border border-amber-700 bg-amber-950/30 px-2 py-0.5 text-amber-200" title={task.notes}>
+              📝 {task.notes.length > 20 ? task.notes.slice(0, 20) + "…" : task.notes}
+            </span>
+          )}
         </div>
       </div>
 

@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - lets modules import without optional b
     CommandHandler = ConversationHandler = MessageHandler = filters = None
 
 
-EDIT_TASK_ID, EDIT_TITLE = range(2)
+EDIT_TASK_ID, EDIT_TITLE, EDIT_NOTES = range(3)
 PRIORITY_ICON = {"high": "🔥", "medium": "⚡", "low": "💤"}
 
 
@@ -68,7 +68,11 @@ def _format_task(task: dict) -> str:
         due = f" | due {due_text}"
     category = f" | #{task['category']}" if task.get("category") else ""
     repeat = f" | repeat {task['repeat_type']}" if task.get("repeat_type") else ""
-    return f"{PRIORITY_ICON.get(task['priority'], '⚡')} `{task['id']}` {task['title']}{category}{due}{repeat}"
+    notes = ""
+    if task.get("notes"):
+        note_preview = task["notes"][:20] + ("…" if len(task["notes"]) > 20 else "")
+        notes = f" | 📝 {note_preview}"
+    return f"{PRIORITY_ICON.get(task['priority'], '⚡')} `{task['id']}` {task['title']}{category}{due}{repeat}{notes}"
 
 
 def format_task_list(tasks: list[dict]) -> str:
@@ -93,6 +97,7 @@ async def add_task(update, context) -> None:
         due_date=due_date,
         due_time=due_time,
         repeat_type=flags.get("repeat"),
+        notes=flags.get("notes"),
     )
     if task is None:
         await update.message.reply_text("Service temporarily unavailable.")
@@ -173,7 +178,19 @@ async def edit_receive_task_id(update, context):
 
 async def edit_receive_title(update, context):
     task_id = context.user_data.pop("edit_task_id", "")
-    result = api_client.update_task(task_id, title=update.message.text.strip())
+    # Store title, move to notes
+    context.user_data["edit_title"] = update.message.text.strip()
+    await update.message.reply_text("Send new notes (or /skip to keep current).")
+    return EDIT_NOTES
+
+
+async def edit_receive_notes(update, context):
+    task_id = context.user_data.pop("edit_task_id", "")
+    title = context.user_data.pop("edit_title", None)
+    notes_text = update.message.text.strip()
+    if notes_text.lower() == "/skip":
+        notes_text = None
+    result = api_client.update_task(task_id, title=title, notes=notes_text)
     await update.message.reply_text("Updated." if result else "Task not found.")
     return ConversationHandler.END
 
@@ -203,6 +220,7 @@ def edit_conversation_handler():
         states={
             EDIT_TASK_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_receive_task_id)],
             EDIT_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_receive_title)],
+            EDIT_NOTES: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_receive_notes)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )

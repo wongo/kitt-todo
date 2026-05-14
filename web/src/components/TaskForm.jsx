@@ -7,7 +7,8 @@ const EMPTY_FORM = {
   due_date: "",
   due_time: "",
   category: "",
-  repeat_type: ""
+  repeat_type: "",
+  notes: ""
 };
 
 export default function TaskForm({ categories, task, onCancel, onSubmit }) {
@@ -23,7 +24,8 @@ export default function TaskForm({ categories, task, onCancel, onSubmit }) {
             due_date: task.due_date || "",
             due_time: task.due_time || "",
             category: task.category || "",
-            repeat_type: task.repeat_type || ""
+            repeat_type: task.repeat_type || "",
+            notes: task.notes || ""
           }
         : EMPTY_FORM
     );
@@ -39,7 +41,8 @@ export default function TaskForm({ categories, task, onCancel, onSubmit }) {
       due_date: form.due_date || null,
       due_time: form.due_time || null,
       category: form.category || null,
-      repeat_type: form.repeat_type || null
+      repeat_type: form.repeat_type || null,
+      notes: form.notes || null
     };
     onSubmit(payload, task?.id);
   };
@@ -134,6 +137,17 @@ export default function TaskForm({ categories, task, onCancel, onSubmit }) {
                 </button>
               ))}
             </div>
+          </label>
+
+          <label className="md:col-span-2">
+            <span className="mb-1 block text-xs uppercase text-zinc-500">Notes</span>
+            <textarea
+              className="w-full rounded border border-kitt-line bg-black px-3 py-2 text-sm text-white outline-none focus:border-kitt-red resize-y min-h-[80px]"
+              value={form.notes}
+              onChange={(event) => update("notes", event.target.value)}
+              placeholder="Optional notes..."
+              rows={3}
+            />
           </label>
         </div>
 

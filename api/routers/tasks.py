@@ -26,6 +26,7 @@ class TaskCreate(BaseModel):
     due_time: time | None = None
     category: str | None = None
     repeat_type: RepeatType | None = None
+    notes: str | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -36,6 +37,7 @@ class TaskUpdate(BaseModel):
     category: str | None = None
     repeat_type: RepeatType | None = None
     is_done: bool | None = None
+    notes: str | None = None
 
 
 def _task_dict(record) -> dict:
@@ -87,9 +89,9 @@ async def create_task(payload: TaskCreate) -> dict:
         row = await conn.fetchrow(
             f"""
             INSERT INTO "{NEON_SCHEMA}".tasks (
-                title, priority, due_date, due_time, category, repeat_type, next_due
+                title, priority, due_date, due_time, category, repeat_type, next_due, notes
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $3)
+            VALUES ($1, $2, $3, $4, $5, $6, $3, $7)
             RETURNING *
             """,
             payload.title.strip(),
@@ -98,6 +100,7 @@ async def create_task(payload: TaskCreate) -> dict:
             payload.due_time,
             payload.category,
             payload.repeat_type,
+            payload.notes,
         )
     return _task_dict(row)
 
@@ -187,9 +190,9 @@ async def mark_task_done(task_id: str) -> dict:
                 await conn.execute(
                     f"""
                     INSERT INTO "{NEON_SCHEMA}".tasks (
-                        title, priority, category, due_date, due_time, repeat_type, created_at, next_due
+                        title, priority, category, due_date, due_time, repeat_type, created_at, next_due, notes
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     """,
                     task["title"],
                     task["priority"],
@@ -199,6 +202,7 @@ async def mark_task_done(task_id: str) -> dict:
                     task["repeat_type"],
                     task["created_at"],
                     next_due,
+                    task["notes"],
                 )
 
     return _task_dict(done_task)

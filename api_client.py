@@ -39,6 +39,7 @@ def create_task(
     due_date: str | None = None,
     due_time: str | None = None,
     repeat_type: str | None = None,
+    notes: str | None = None,
 ) -> dict[str, Any] | None:
     """POST /api/tasks"""
     payload = {
@@ -48,6 +49,7 @@ def create_task(
         "due_date": due_date,
         "due_time": due_time,
         "repeat_type": repeat_type,
+        "notes": notes,
     }
     try:
         resp = _get_client().post("/api/tasks", json=payload)
@@ -98,6 +100,7 @@ def update_task(
     due_date: str | None = None,
     due_time: str | None = None,
     repeat_type: str | None = None,
+    notes: str | None = None,
 ) -> dict[str, Any] | None:
     """PUT /api/tasks/{task_id}"""
     payload = {}
@@ -113,6 +116,8 @@ def update_task(
         payload["due_time"] = due_time
     if repeat_type is not None:
         payload["repeat_type"] = repeat_type
+    if notes is not None:
+        payload["notes"] = notes
     if not payload:
         return get_task(task_id)
     try:

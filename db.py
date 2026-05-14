@@ -54,7 +54,8 @@ def init_db() -> None:
                 is_done INTEGER DEFAULT 0,
                 done_at TEXT,
                 created_at TEXT NOT NULL,
-                next_due TEXT
+                next_due TEXT,
+                notes TEXT
             )
             """
         )
@@ -82,6 +83,10 @@ def init_db() -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(reminders)").fetchall()}
         if "chat_id" not in columns:
             conn.execute("ALTER TABLE reminders ADD COLUMN chat_id TEXT")
+        # Migration: add notes column if it doesn't exist
+        task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+        if "notes" not in task_cols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN notes TEXT")
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -95,6 +100,7 @@ def create_task(
     due_date: str | None = None,
     due_time: str | None = None,
     repeat_type: str | None = None,
+    notes: str | None = None,
     task_id: str | None = None,
     created_at: str | None = None,
     next_due: str | None = None,
@@ -117,6 +123,7 @@ def create_task(
         "done_at": None,
         "created_at": created_at or utc_now_iso(),
         "next_due": next_due,
+        "notes": notes,
     }
     if not task["title"]:
         raise ValueError("title is required")
@@ -126,11 +133,11 @@ def create_task(
             """
             INSERT INTO tasks (
                 id, title, priority, category, due_date, due_time, repeat_type,
-                is_done, done_at, created_at, next_due
+                is_done, done_at, created_at, next_due, notes
             )
             VALUES (
                 :id, :title, :priority, :category, :due_date, :due_time,
-                :repeat_type, :is_done, :done_at, :created_at, :next_due
+                :repeat_type, :is_done, :done_at, :created_at, :next_due, :notes
             )
             """,
             task,
