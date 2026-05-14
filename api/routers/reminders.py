@@ -10,7 +10,6 @@ from pydantic import BaseModel
 
 logger = logging.getLogger("kitt-todo")
 
-
 try:
     from ..db import NEON_SCHEMA, get_pool
 except ImportError:  # pragma: no cover
@@ -25,29 +24,14 @@ class ReminderCreate(BaseModel):
     chat_id: str | None = None
 
 
-class ReminderSent(BaseModel):
-    sent: bool = True
-
-
 @router.post("")
 async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
     """POST /api/reminders - create a reminder"""
-    logger.warning("CREATE_REMINDER called with task_id=%s", payload.task_id)
+    logger.warning("CREATE_REMINDER task_id=%s", payload.task_id)
     try:
         pool = await get_pool()
-        logger.warning("Pool acquired")
         async with pool.acquire() as conn:
-            logger.warning("Connection acquired")
-            task_row = await conn.fetchrow(
-                f'SELECT id FROM "{NEON_SCHEMA}".tasks WHERE id = $1',
-                payload.task_id,
-            )
-            logger.warning("Task check result: %s", task_row)
-            if not task_row:
-                raise HTTPException(status_code=404, detail="Task not found")
-
             remind_dt = datetime.fromisoformat(payload.remind_at.replace("Z", "+00:00"))
-            logger.warning("Parsed datetime: %s", remind_dt)
             row = await conn.fetchrow(
                 """
                 INSERT INTO reminders (task_id, remind_at, chat_id)
@@ -58,11 +42,7 @@ async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
                 remind_dt,
                 payload.chat_id,
             )
-            logger.warning("Insert result: %s", dict(row))
             return dict(row)
-    except HTTPException:
-        logger.warning("HTTPException raised")
-        raise
     except Exception as exc:
         logger.error("create_reminder EXCEPTION: %s\n%s", exc, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(exc))
@@ -71,17 +51,14 @@ async def create_reminder(payload: ReminderCreate) -> dict[str, Any]:
 @router.get("/due")
 async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[str, Any]]:
     """GET /api/reminders/due?now=... - get reminders due before now"""
-    logger.warning("GET_DUE_REMINDERS called, now=%s", now)
+    logger.warning("GET_DUE_REMINDERS now=%s", now)
     try:
         pool = await get_pool()
-        logger.warning("Pool acquired in due")
         if now is None:
             now_val = datetime.now(timezone.utc).replace(microsecond=0)
         else:
             now_val = datetime.fromisoformat(now.replace("Z", "+00:00"))
-        logger.warning("now_val=%s", now_val)
         async with pool.acquire() as conn:
-            logger.warning("Connection acquired in due")
             rows = await conn.fetch(
                 """
                 SELECT r.id, r.task_id, r.remind_at::text, r.chat_id, r.sent, t.title
@@ -92,7 +69,6 @@ async def get_due_reminders(now: str | None = Query(default=None)) -> list[dict[
                 """,
                 now_val,
             )
-            logger.warning("Query result: %d rows", len(rows))
             return [dict(row) for row in rows]
     except Exception as exc:
         logger.error("get_due_reminders EXCEPTION: %s\n%s", exc, traceback.format_exc())

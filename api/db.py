@@ -89,11 +89,23 @@ async def init_schema() -> None:
                 task_id TEXT NOT NULL,
                 remind_at TIMESTAMPTZ NOT NULL,
                 chat_id TEXT,
-                sent BOOLEAN DEFAULT FALSE,
-                CONSTRAINT fk_task FOREIGN KEY (task_id) REFERENCES "{NEON_SCHEMA}".tasks(id) ON DELETE CASCADE
+                sent BOOLEAN DEFAULT FALSE
             )
             """
         )
+        # Ensure FK constraint exists (idempotent, handles case where table was created without it)
+        await conn.execute(f"""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'reminders_task_fk'
+                ) THEN
+                    ALTER TABLE "{NEON_SCHEMA}".reminders
+                    ADD CONSTRAINT reminders_task_fk
+                    FOREIGN KEY (task_id) REFERENCES "{NEON_SCHEMA}".tasks(id) ON DELETE CASCADE;
+                END IF;
+            END $$;
+        """)
         await conn.execute(
             f"""
             CREATE INDEX IF NOT EXISTS idx_reminders_due
