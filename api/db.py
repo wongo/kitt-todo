@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Final
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Final
 
 import asyncpg
 from dotenv import load_dotenv
@@ -14,10 +15,6 @@ NEON_SCHEMA: Final[str] = os.getenv("NEON_SCHEMA", "kitt_todo")
 
 pool: asyncpg.Pool | None = None
 _log = logging.getLogger("kitt-todo")
-
-
-async def _init_connection(conn: asyncpg.Connection) -> None:
-    await conn.execute(f'SET search_path TO "{NEON_SCHEMA}"')
 
 
 async def create_pool() -> asyncpg.Pool:
@@ -32,9 +29,8 @@ async def create_pool() -> asyncpg.Pool:
         min_size=1,
         max_size=10,
         command_timeout=60,
-        init=_init_connection,
     )
-    _log.warning("create_pool: pool created")
+    _log.warning("create_pool: pool created, min=1 max=10")
     return pool
 
 
@@ -52,11 +48,22 @@ async def close_pool() -> None:
         pool = None
 
 
+@asynccontextmanager
+async def acquire_conn() -> AsyncIterator[asyncpg.Connection]:
+    """Acquire a connection and set search_path to NEON_SCHEMA, always."""
+    p = await get_pool()
+    conn = await p.acquire()
+    try:
+        await conn.execute(f'SET search_path TO "{NEON_SCHEMA}"')
+        yield conn
+    finally:
+        await p.release(conn)
+
+
 async def init_schema() -> None:
     _log.warning("INIT_SCHEMA starting...")
-    db_pool = await get_pool()
-    async with db_pool.acquire() as conn:
-        _log.warning("init_schema: acquired connection")
+    async with acquire_conn() as conn:
+        _log.warning("init_schema: acquired connection with correct search_path")
         await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{NEON_SCHEMA}"')
         _log.warning("init_schema: schema created")
         await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
@@ -106,5 +113,3 @@ async def init_schema() -> None:
             """
         )
         _log.warning("init_schema: all tables verified")
-        sp = await conn.fetchval("SHOW search_path")
-        _log.warning("init_schema: search_path = %s", sp)
