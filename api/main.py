@@ -4,10 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 try:  # Supports both `uvicorn api.main:app` and `cd api && uvicorn main:app`.
-    from .db import close_pool, create_pool, init_schema
+    from .db import close_pool, create_pool, get_pool, init_schema
     from .routers import categories, tasks, reminders
 except ImportError:  # pragma: no cover
-    from db import close_pool, create_pool, init_schema
+    from db import close_pool, create_pool, get_pool, init_schema
     from routers import categories, tasks, reminders
 
 
