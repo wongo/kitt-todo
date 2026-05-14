@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: kitt-todo-api
+    env: python
+    pythonVersion: "3.14"
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_j89nsGCaeKMf@ep-delicate-pine-aqgk6dsk-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      - key: NEON_SCHEMA
+        value: kitt_todo

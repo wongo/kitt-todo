@@ -1,0 +1,27 @@
+---
+import Layout from "../layouts/Layout.astro";
+import TaskList from "../components/TaskList.jsx";
+---
+
+<Layout title="KITT-TODO">
+  <main class="min-h-screen px-4 py-5 text-zinc-100 md:px-8">
+    <section class="mx-auto flex w-full max-w-7xl flex-col gap-5">
+      <header class="border-b border-kitt-line pb-4">
+        <pre class="overflow-hidden text-[10px] leading-[1.05] text-kitt-red drop-shadow-[0_0_12px_rgba(255,0,0,0.55)] sm:text-xs md:text-sm">{String.raw`
+██╗  ██╗██╗████████╗████████╗      ████████╗ ██████╗ ██████╗  ██████╗
+██║ ██╔╝██║╚══██╔══╝╚══██╔══╝      ╚══██╔══╝██╔═══██╗██╔══██╗██╔═══██╗
+█████╔╝ ██║   ██║      ██║   █████╗   ██║   ██║   ██║██║  ██║██║   ██║
+██╔═██╗ ██║   ██║      ██║   ╚════╝   ██║   ██║   ██║██║  ██║██║   ██║
+██║  ██╗██║   ██║      ██║            ██║   ╚██████╔╝██████╔╝╚██████╔╝
+╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝            ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝
+`}</pre>
+        <div class="mt-3 flex flex-col gap-2 text-xs uppercase text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+          <span>Phase 2 Web Console</span>
+          <span class="text-kitt-red">ONLINE</span>
+        </div>
+      </header>
+
+      <TaskList client:load />
+    </section>
+  </main>
+</Layout>
