@@ -93,10 +93,9 @@ async def init_schema() -> None:
             )
             """
         )
-        # Index for faster due-reminder queries (partial index on unsent reminders)
         await conn.execute(
             f"""
             CREATE INDEX IF NOT EXISTS idx_reminders_due
-            ON "{NEON_SCHEMA}".reminders (remind_at) WHERE sent = FALSE
+            ON "{NEON_SCHEMA}".reminders (remind_at)
             """
         )
