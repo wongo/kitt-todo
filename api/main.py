@@ -48,3 +48,19 @@ async def debug_pool() -> dict:
     async with p.acquire() as conn:
         row = await conn.fetchrow("SELECT now() as ts")
     return {"pool_size": p.get_size(), "time": str(row["ts"])}
+
+
+@app.get("/api/debug/schema")
+async def debug_schema() -> dict:
+    """Check search_path and what tables exist"""
+    p = await get_pool()
+    async with p.acquire() as conn:
+        search_path = await conn.fetchval("SHOW search_path")
+        tables = await conn.fetch("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'kitt_todo'
+        """)
+    return {
+        "search_path": search_path,
+        "tables": [t["table_name"] for t in tables]
+    }

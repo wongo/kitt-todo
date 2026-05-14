@@ -89,7 +89,8 @@ async def init_schema() -> None:
                 task_id TEXT NOT NULL,
                 remind_at TIMESTAMPTZ NOT NULL,
                 chat_id TEXT,
-                sent BOOLEAN DEFAULT FALSE
+                sent BOOLEAN DEFAULT FALSE,
+                CONSTRAINT fk_task FOREIGN KEY (task_id) REFERENCES "{NEON_SCHEMA}".tasks(id) ON DELETE CASCADE
             )
             """
         )
