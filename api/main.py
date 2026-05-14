@@ -43,7 +43,6 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/api/debug/pool")
-async def debug_pool() -> dict[str, str]:
-    """Minimal pool test"""
+async def debug_pool() -> dict:
     p = await get_pool()
-    return {"status": "pool_created", "pool_size": p.get_size()}
+    return {"pool_size": p.get_size(), "min_size": p.get_min_size()}
