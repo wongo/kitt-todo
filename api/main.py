@@ -1,17 +1,27 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 try:  # Supports both `uvicorn api.main:app` and `cd api && uvicorn main:app`.
-    from .db import close_pool, create_pool, get_pool, init_schema
+    from .db import acquire_conn, close_pool, create_pool, init_schema
     from .routers import categories, tasks, reminders
 except ImportError:  # pragma: no cover
-    from db import close_pool, create_pool, get_pool, init_schema
+    from db import acquire_conn, close_pool, create_pool, init_schema
     from routers import categories, tasks, reminders
 
 
-app = FastAPI(title="KITT-TODO API", version="2.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await create_pool()
+    await init_schema()
+    yield
+    await close_pool()
+
+
+app = FastAPI(title="KITT-TODO API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,17 +36,6 @@ app.include_router(categories.router, prefix="/api")
 app.include_router(reminders.router, prefix="/api")
 
 
-@app.on_event("startup")
-async def startup() -> None:
-    await create_pool()
-    await init_schema()
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    await close_pool()
-
-
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -44,27 +43,8 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/debug/pool")
 async def debug_pool() -> dict:
-    p = await get_pool()
-    async with p.acquire() as conn:
+    async with acquire_conn() as conn:
         row = await conn.fetchrow("SELECT now() as ts")
-    return {"pool_size": p.get_size(), "time": str(row["ts"])}
-
-
-@app.get("/api/debug/schema")
-async def debug_schema() -> dict:
-    """Check search_path and what tables exist"""
+    from .db import get_pool
     p = await get_pool()
-    async with p.acquire() as conn:
-        search_path = await conn.fetchval("SHOW search_path")
-        # Check both schemas
-        kitt_reminders = await conn.fetchval(
-            "SELECT count(*) FROM \"kitt_todo\".reminders"
-        )
-        public_reminders = await conn.fetchval(
-            "SELECT count(*) FROM public.reminders"
-        )
-    return {
-        "search_path": search_path,
-        "kitt_reminders_count": kitt_reminders,
-        "public_reminders_count": public_reminders,
-    }
+    return {"pool_size": p.get_size(), "time": str(row["ts"])}
